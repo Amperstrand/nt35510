@@ -1,10 +1,30 @@
 #![cfg_attr(not(test), no_std)]
 //! Standalone `no_std` driver for NT35510 DSI LCD controller panels.
 //!
-//! The default configuration is tested on STM32F469I-DISCO:
-//! portrait mode, RGB565, 480x800.
-//! Landscape mode uses MADCTL rotation matching the OTM8009A pattern,
-//! but is currently untested.
+//! Tested on STM32F469I-DISCO (B08 revision, Frida 3K138 panel).
+//! API mirrors [`otm8009a`](https://crates.io/crates/otm8009a) for BSP-level
+//! compatibility — both drivers expose `Mode`, `ColorMap`, and similar config
+//! structs so the BSP can treat them uniformly.
+//!
+//! # Orientation
+//!
+//! - **Portrait** (480x800): default, tested on hardware.
+//! - **Landscape** (800x480): uses MADCTL MX|MV rotation, untested.
+//!
+//! # Color mapping
+//!
+//! - **Rgb**: default (red channel first).
+//! - **Bgr**: sets MADCTL bit 3, swaps red/blue channels.
+//!
+//! # Brightness
+//!
+//! Controlled via `WRDISBV` (0x00–0xFF) and `WRCTRLD` (backlight on/off).
+//! `WRCABC` enables content-adaptive brightness.
+//!
+//! # Tearing Effect (TE)
+//!
+//! NT35510 supports TE output on the TE pin. Enable via [`enable_te_output`]
+//! after init to get a hardware VBlank signal for synchronized buffer swaps.
 
 mod regs;
 
@@ -21,6 +41,7 @@ pub enum Error {
     InvalidDimensions,
 }
 
+/// Display orientation. Matches [`otm8009a::Mode`](https://docs.rs/otm8009a/latest/otm8009a/enum.Mode.html).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Mode {
     /// Portrait orientation (480x800). Tested on STM32F469I-DISCO.
@@ -29,6 +50,16 @@ pub enum Mode {
     Landscape,
 }
 
+/// Color channel ordering. Matches [`otm8009a::ColorMap`](https://docs.rs/otm8009a/latest/otm8009a/enum.ColorMap.html).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum ColorMap {
+    /// RGB order (default).
+    Rgb,
+    /// BGR order (swaps red and blue channels via MADCTL bit 3).
+    Bgr,
+}
+
+/// Pixel format for the DSI video stream.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum ColorFormat {
     /// 16-bit RGB565. Tested on STM32F469I-DISCO.
@@ -40,10 +71,18 @@ pub enum ColorFormat {
 /// Configuration for the NT35510 panel.
 ///
 /// Default values match the STM32F469I-DISCO board configuration
-/// (portrait mode, RGB565, 480x800).
+/// (portrait mode, RGB, RGB565, 480x800).
+///
+/// Mirrors [`otm8009a::Otm8009AConfig`](https://docs.rs/otm8009a/latest/otm8009a/struct.Otm8009AConfig.html)
+/// for BSP compatibility, minus `frame_rate` (NT35510 frame rate is set via LTDC timing,
+/// not the panel, unlike OTM8009A).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct Nt35510Config {
+    /// Display orientation.
     pub mode: Mode,
+    /// Color channel ordering.
+    pub color_map: ColorMap,
+    /// Pixel format for DSI video stream.
     pub color_format: ColorFormat,
     /// Display width in pixels (before rotation).
     pub cols: u16,
@@ -55,6 +94,7 @@ impl Default for Nt35510Config {
     fn default() -> Self {
         Self {
             mode: Mode::Portrait,
+            color_map: ColorMap::Rgb,
             color_format: ColorFormat::Rgb565,
             cols: 480,
             rows: 800,
@@ -113,29 +153,10 @@ impl Nt35510 {
         }
     }
 
-    /// Initialize the panel in RGB888 (24-bit) mode.
-    pub fn init<D: DelayNs>(
-        &mut self,
-        dsi_host: &mut impl DsiHostCtrlIo,
-        delay: &mut D,
-    ) -> Result<(), Error> {
-        let config = Nt35510Config {
-            color_format: ColorFormat::Rgb888,
-            ..Nt35510Config::default()
-        };
-        self.init_with_config(dsi_host, delay, config)
-    }
-
-    /// Initialize the panel in RGB565 (16-bit) mode.
-    pub fn init_rgb565<D: DelayNs>(
-        &mut self,
-        dsi_host: &mut impl DsiHostCtrlIo,
-        delay: &mut D,
-    ) -> Result<(), Error> {
-        self.init_with_config(dsi_host, delay, Nt35510Config::default())
-    }
-
     /// Initialize the panel with an explicit configuration.
+    ///
+    /// This is the primary init method. Configures orientation, color format,
+    /// and color map based on the provided [`Nt35510Config`].
     pub fn init_with_config<D: DelayNs>(
         &mut self,
         dsi_host: &mut impl DsiHostCtrlIo,
@@ -184,36 +205,142 @@ impl Nt35510 {
         self.write_reg(dsi_host, NT35510_CMD_CC, &[0x03, 0x00, 0x00])?;
         self.write_reg(dsi_host, NT35510_CMD_BA, &[0x01, 0x01])?;
 
-        let colmod = match config.color_format {
-            ColorFormat::Rgb565 => NT35510_COLMOD_RGB565,
-            ColorFormat::Rgb888 => NT35510_COLMOD_RGB888,
-        };
-        let madctl = match config.mode {
+        // TE on (before sleep out, matching ST reference)
+        self.write_cmd(
+            dsi_host,
+            NT35510_CMD_TEEON,
+            NT35510_TEEON_VBLANKING_INFO_ONLY,
+        )?;
+
+        // Default to RGB888 (ST reference sets this before sleep out)
+        self.write_cmd(dsi_host, NT35510_CMD_COLMOD, NT35510_COLMOD_RGB888)?;
+
+        // Sleep out (with delay before — ST reference has 200ms pre-delay)
+        delay.delay_us(200_000);
+        self.write_cmd(dsi_host, NT35510_CMD_SLPOUT, 0x00)?;
+        delay.delay_us(120_000);
+
+        // Configure orientation and color map via MADCTL
+        let mut madctl = match config.mode {
             Mode::Portrait => NT35510_MADCTL_PORTRAIT,
             Mode::Landscape => NT35510_MADCTL_LANDSCAPE,
         };
+        if config.color_map == ColorMap::Bgr {
+            madctl |= NT35510_MADCTL_BGR;
+        }
+        self.write_cmd(dsi_host, NT35510_CMD_MADCTL, madctl)?;
 
+        // Column and row address set
         let last_col = (config.cols - 1).to_be_bytes();
         let last_row = (config.rows - 1).to_be_bytes();
         let caset = [0x00, 0x00, last_col[0], last_col[1]];
         let raset = [0x00, 0x00, last_row[0], last_row[1]];
-
-        delay.delay_us(200_000);
-        self.write_cmd(dsi_host, NT35510_CMD_SLPOUT, 0x00)?;
-        delay.delay_us(120_000);
-        self.write_cmd(dsi_host, NT35510_CMD_COLMOD, colmod)?;
-        self.write_cmd(dsi_host, NT35510_CMD_MADCTL, madctl)?;
         self.write_reg(dsi_host, NT35510_CMD_CASET, &caset)?;
         self.write_reg(dsi_host, NT35510_CMD_RASET, &raset)?;
+
+        // Override pixel format if RGB565 was requested
+        if config.color_format == ColorFormat::Rgb565 {
+            self.write_cmd(dsi_host, NT35510_CMD_COLMOD, NT35510_COLMOD_RGB565)?;
+        }
+
+        // Brightness and backlight
         self.write_cmd(dsi_host, NT35510_CMD_WRDISBV, 0x7F)?;
-        self.write_cmd(dsi_host, NT35510_CMD_WRCTRLD, 0x2C)?;
-        self.write_cmd(dsi_host, NT35510_CMD_WRCABC, 0x00)?;
+        self.write_cmd(dsi_host, NT35510_CMD_WRCTRLD, NT35510_WRCTRLD_BL_ON)?;
+        self.write_cmd(dsi_host, NT35510_CMD_WRCABC, 0x02)?;
+        self.write_cmd(dsi_host, NT35510_CMD_WRCABCMB, 0xFF)?;
+
+        // Display on
         delay.delay_us(10_000);
         self.write_cmd(dsi_host, NT35510_CMD_DISPON, 0x00)?;
         delay.delay_us(10_000);
+
+        // Start GRAM write (initiates frame write from LTDC in video mode)
         self.write_cmd(dsi_host, NT35510_CMD_RAMWR, 0x00)?;
 
         self.initialized = true;
+        Ok(())
+    }
+
+    /// Initialize the panel with default config (portrait, RGB, RGB565).
+    ///
+    /// Convenience wrapper for [`init_with_config`](Self::init_with_config).
+    pub fn init<D: DelayNs>(
+        &mut self,
+        dsi_host: &mut impl DsiHostCtrlIo,
+        delay: &mut D,
+    ) -> Result<(), Error> {
+        self.init_with_config(dsi_host, delay, Nt35510Config::default())
+    }
+
+    /// Initialize the panel in RGB565 mode with custom orientation and color map.
+    pub fn init_rgb565<D: DelayNs>(
+        &mut self,
+        dsi_host: &mut impl DsiHostCtrlIo,
+        delay: &mut D,
+        mode: Mode,
+        color_map: ColorMap,
+    ) -> Result<(), Error> {
+        let config = Nt35510Config {
+            mode,
+            color_map,
+            color_format: ColorFormat::Rgb565,
+            ..Nt35510Config::default()
+        };
+        self.init_with_config(dsi_host, delay, config)
+    }
+
+    /// Enable tearing effect (TE) output on the TE pin.
+    ///
+    /// After calling this, the TE pin pulses at each VBlank boundary.
+    /// Pass `on_line = 0` for standard VBlank-only mode.
+    ///
+    /// Matches [`Otm8009A::enable_te_output`](https://docs.rs/otm8009a/latest/otm8009a/struct.Otm8009A.html#method.enable_te_output).
+    pub fn enable_te_output<D: DsiHostCtrlIo>(
+        &mut self,
+        on_line: u16,
+        dsi: &mut D,
+    ) -> Result<(), Error> {
+        self.write_long(dsi, NT35510_CMD_STESL, &on_line.to_be_bytes())?;
+        self.write_cmd(dsi, NT35510_CMD_TEEON, NT35510_TEEON_VBLANKING_INFO_ONLY)?;
+        Ok(())
+    }
+
+    /// Disable tearing effect output.
+    pub fn disable_te_output<D: DsiHostCtrlIo>(&mut self, dsi: &mut D) -> Result<(), Error> {
+        self.write_cmd(dsi, NT35510_CMD_TEOFF, 0x00)
+    }
+
+    /// Set display brightness level.
+    ///
+    /// `brightness`: 0x00 (off) to 0xFF (maximum). Default at init is 0x7F.
+    pub fn set_brightness<D: DsiHostCtrlIo>(
+        &mut self,
+        dsi: &mut D,
+        brightness: u8,
+    ) -> Result<(), Error> {
+        self.write_cmd(dsi, NT35510_CMD_WRDISBV, brightness)
+    }
+
+    /// Enable or disable the backlight via WRCTRLD.
+    pub fn set_backlight<D: DsiHostCtrlIo>(&mut self, dsi: &mut D, on: bool) -> Result<(), Error> {
+        let val = if on {
+            NT35510_WRCTRLD_BL_ON
+        } else {
+            NT35510_WRCTRLD_BL_OFF
+        };
+        self.write_cmd(dsi, NT35510_CMD_WRCTRLD, val)
+    }
+
+    /// Turn the display off (enter sleep mode).
+    pub fn sleep_in<D: DelayNs>(
+        &mut self,
+        dsi: &mut impl DsiHostCtrlIo,
+        delay: &mut D,
+    ) -> Result<(), Error> {
+        self.write_cmd(dsi, NT35510_CMD_DISPOFF, 0x00)?;
+        delay.delay_us(120_000);
+        self.write_cmd(dsi, NT35510_CMD_SLPIN, 0x00)?;
+        self.initialized = false;
         Ok(())
     }
 
@@ -239,6 +366,17 @@ impl Nt35510 {
             .map_err(|_| Error::DsiWrite)
     }
 
+    fn write_long(
+        &self,
+        dsi_host: &mut impl DsiHostCtrlIo,
+        cmd: u8,
+        data: &[u8],
+    ) -> Result<(), Error> {
+        dsi_host
+            .write(DsiWriteCommand::DcsLongWrite { arg: cmd, data })
+            .map_err(|_| Error::DsiWrite)
+    }
+
     fn write_reg(
         &self,
         dsi_host: &mut impl DsiHostCtrlIo,
@@ -250,9 +388,7 @@ impl Nt35510 {
         } else if data.len() == 1 {
             self.write_cmd(dsi_host, reg, data[0])
         } else {
-            dsi_host
-                .write(DsiWriteCommand::DcsLongWrite { arg: reg, data })
-                .map_err(|_| Error::DsiWrite)
+            self.write_long(dsi_host, reg, data)
         }
     }
 }
