@@ -41,6 +41,19 @@ pub enum Error {
     InvalidDimensions,
 }
 
+impl core::fmt::Display for Error {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        match self {
+            Error::DsiRead => write!(f, "DSI read failed"),
+            Error::DsiWrite => write!(f, "DSI write failed"),
+            Error::ProbeMismatch(id) => {
+                write!(f, "probe mismatch: expected NT35510, got 0x{id:02X}")
+            }
+            Error::InvalidDimensions => write!(f, "display dimensions must be non-zero"),
+        }
+    }
+}
+
 /// Display orientation. Matches [`otm8009a::Mode`](https://docs.rs/otm8009a/latest/otm8009a/enum.Mode.html).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Mode {
@@ -71,7 +84,7 @@ pub enum ColorFormat {
 /// Configuration for the NT35510 panel.
 ///
 /// Default values match the STM32F469I-DISCO board configuration
-/// (portrait mode, RGB, RGB565, 480x800).
+/// (portrait mode, RGB, RGB888, 480x800).
 ///
 /// Mirrors [`otm8009a::Otm8009AConfig`](https://docs.rs/otm8009a/latest/otm8009a/struct.Otm8009AConfig.html)
 /// for BSP compatibility, minus `frame_rate` (NT35510 frame rate is set via LTDC timing,
@@ -95,7 +108,7 @@ impl Default for Nt35510Config {
         Self {
             mode: Mode::Portrait,
             color_map: ColorMap::Rgb,
-            color_format: ColorFormat::Rgb565,
+            color_format: ColorFormat::Rgb888,
             cols: 480,
             rows: 800,
         }
@@ -113,6 +126,7 @@ impl Default for Nt35510 {
 }
 
 impl Nt35510 {
+    #[must_use]
     pub const fn new() -> Self {
         Self { initialized: false }
     }
@@ -122,11 +136,7 @@ impl Nt35510 {
     /// Returns `Ok(())` if the panel responds with expected NT35510 IDs.
     /// Returns `Err(Error::ProbeMismatch(id))` if a different panel responds.
     /// Returns `Err(Error::DsiRead)` if DSI reads fail entirely.
-    pub fn probe<D: DelayNs>(
-        &mut self,
-        dsi_host: &mut impl DsiHostCtrlIo,
-        _delay: &mut D,
-    ) -> Result<(), Error> {
+    pub fn probe(&mut self, dsi_host: &mut impl DsiHostCtrlIo) -> Result<(), Error> {
         match self.read_id(dsi_host, NT35510_CMD_RDID2) {
             Ok(id) if id == NT35510_ID2_EXPECTED => return Ok(()),
             Ok(id) => return Err(Error::ProbeMismatch(id)),
@@ -259,7 +269,7 @@ impl Nt35510 {
         Ok(())
     }
 
-    /// Initialize the panel with default config (portrait, RGB, RGB565).
+    /// Initialize the panel with default config (portrait, RGB, RGB888).
     ///
     /// Convenience wrapper for [`init_with_config`](Self::init_with_config).
     pub fn init<D: DelayNs>(
@@ -282,6 +292,23 @@ impl Nt35510 {
             mode,
             color_map,
             color_format: ColorFormat::Rgb565,
+            ..Nt35510Config::default()
+        };
+        self.init_with_config(dsi_host, delay, config)
+    }
+
+    /// Initialize the panel in RGB888 mode with custom orientation and color map.
+    pub fn init_rgb888<D: DelayNs>(
+        &mut self,
+        dsi_host: &mut impl DsiHostCtrlIo,
+        delay: &mut D,
+        mode: Mode,
+        color_map: ColorMap,
+    ) -> Result<(), Error> {
+        let config = Nt35510Config {
+            mode,
+            color_map,
+            color_format: ColorFormat::Rgb888,
             ..Nt35510Config::default()
         };
         self.init_with_config(dsi_host, delay, config)
