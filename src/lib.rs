@@ -23,7 +23,7 @@
 //!
 //! # Tearing Effect (TE)
 //!
-//! NT35510 supports TE output on the TE pin. Enable via [`enable_te_output`]
+//! NT35510 supports TE output on the TE pin. Enable via [`Nt35510::enable_te_output`]
 //! after init to get a hardware VBlank signal for synchronized buffer swaps.
 
 mod regs;
