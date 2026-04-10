@@ -171,6 +171,7 @@ impl Nt35510 {
             return Err(Error::InvalidDimensions);
         }
 
+        // LV2 Page 1: power rail and voltage init
         self.write_reg(
             dsi_host,
             NT35510_CMD_SETEXTC,
@@ -191,36 +192,31 @@ impl Nt35510 {
         self.write_reg(dsi_host, NT35510_CMD_BD, &[0x00, 0x80, 0x00])?;
         self.write_reg(dsi_host, NT35510_CMD_BE, &[0x00, 0x50])?;
 
+        // LV2 Page 0: display timing and control
         self.write_reg(
             dsi_host,
             NT35510_CMD_SETEXTC,
             &[0x55, 0xAA, 0x52, 0x08, 0x00],
         )?;
         self.write_reg(dsi_host, NT35510_CMD_B1, &[0xFC, 0x00])?;
-        self.write_reg(dsi_host, NT35510_CMD_B6, &[0x03, 0x03])?;
-        self.write_reg(dsi_host, NT35510_CMD_B5, &[0x50, 0x50])?;
+        self.write_reg(dsi_host, NT35510_CMD_B6, &[0x03])?;
+        self.write_reg(dsi_host, NT35510_CMD_B5, &[0x51])?;
         self.write_reg(dsi_host, NT35510_CMD_B7, &[0x00, 0x00])?;
         self.write_reg(dsi_host, NT35510_CMD_B8, &[0x01, 0x02, 0x02, 0x02])?;
         self.write_reg(dsi_host, NT35510_CMD_BC, &[0x00, 0x00, 0x00])?;
         self.write_reg(dsi_host, NT35510_CMD_CC, &[0x03, 0x00, 0x00])?;
-        self.write_reg(dsi_host, NT35510_CMD_BA, &[0x01, 0x01])?;
+        self.write_reg(dsi_host, NT35510_CMD_BA, &[0x01])?;
 
-        // TE on (before sleep out, matching ST reference)
+        // TE on, pixel format, orientation — all before sleep out
         self.write_cmd(
             dsi_host,
             NT35510_CMD_TEEON,
             NT35510_TEEON_VBLANKING_INFO_ONLY,
         )?;
-
-        // Default to RGB888 (ST reference sets this before sleep out)
         self.write_cmd(dsi_host, NT35510_CMD_COLMOD, NT35510_COLMOD_RGB888)?;
 
-        // Sleep out (with delay before — ST reference has 200ms pre-delay)
         delay.delay_us(200_000);
-        self.write_cmd(dsi_host, NT35510_CMD_SLPOUT, 0x00)?;
-        delay.delay_us(120_000);
 
-        // Configure orientation and color map via MADCTL
         let mut madctl = match config.mode {
             Mode::Portrait => NT35510_MADCTL_PORTRAIT,
             Mode::Landscape => NT35510_MADCTL_LANDSCAPE,
@@ -230,31 +226,33 @@ impl Nt35510 {
         }
         self.write_cmd(dsi_host, NT35510_CMD_MADCTL, madctl)?;
 
-        // Column and row address set
         let last_col = (config.cols - 1).to_be_bytes();
         let last_row = (config.rows - 1).to_be_bytes();
-        let caset = [0x00, 0x00, last_col[0], last_col[1]];
-        let raset = [0x00, 0x00, last_row[0], last_row[1]];
-        self.write_reg(dsi_host, NT35510_CMD_CASET, &caset)?;
-        self.write_reg(dsi_host, NT35510_CMD_RASET, &raset)?;
+        self.write_reg(
+            dsi_host,
+            NT35510_CMD_CASET,
+            &[0x00, 0x00, last_col[0], last_col[1]],
+        )?;
+        self.write_reg(
+            dsi_host,
+            NT35510_CMD_RASET,
+            &[0x00, 0x00, last_row[0], last_row[1]],
+        )?;
 
-        // Override pixel format if RGB565 was requested
+        self.write_cmd(dsi_host, NT35510_CMD_SLPOUT, 0x00)?;
+        delay.delay_us(120_000);
+
+        // Re-set pixel format after sleep out
+        self.write_cmd(dsi_host, NT35510_CMD_COLMOD, NT35510_COLMOD_RGB888)?;
         if config.color_format == ColorFormat::Rgb565 {
             self.write_cmd(dsi_host, NT35510_CMD_COLMOD, NT35510_COLMOD_RGB565)?;
         }
 
-        // Brightness and backlight
         self.write_cmd(dsi_host, NT35510_CMD_WRDISBV, 0x7F)?;
         self.write_cmd(dsi_host, NT35510_CMD_WRCTRLD, NT35510_WRCTRLD_BL_ON)?;
         self.write_cmd(dsi_host, NT35510_CMD_WRCABC, 0x02)?;
         self.write_cmd(dsi_host, NT35510_CMD_WRCABCMB, 0xFF)?;
-
-        // Display on
-        delay.delay_us(10_000);
         self.write_cmd(dsi_host, NT35510_CMD_DISPON, 0x00)?;
-        delay.delay_us(10_000);
-
-        // Start GRAM write (initiates frame write from LTDC in video mode)
         self.write_cmd(dsi_host, NT35510_CMD_RAMWR, 0x00)?;
 
         self.initialized = true;
