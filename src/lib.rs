@@ -163,6 +163,37 @@ impl Nt35510 {
         }
     }
 
+    /// Diagnostic utility: write an incremental ramp pattern to display RAM
+    /// and read it back to verify the DSI link and GRAM integrity.
+    ///
+    /// Writes patterns of decreasing length (17 down to 1 byte) via
+    /// [`RAMWR`](NT35510_CMD_RAMWR) and reads them back via
+    /// [`RAMRD`](NT35510_CMD_RAMRD). Useful for bring-up debugging to
+    /// confirm the DSI bus can both write and read display memory.
+    ///
+    /// Matches [`Otm8009A::memory_check`](https://docs.rs/otm8009a/latest/otm8009a/struct.Otm8009A.html#method.memory_check).
+    pub fn memory_check<D: DsiHostCtrlIo>(&mut self, dsi_host: &mut D) -> Result<(), Error> {
+        let ramp = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17];
+        let mut buf = [0u8; 17];
+        for i in (1..17).rev() {
+            dsi_host
+                .write(DsiWriteCommand::DcsLongWrite {
+                    arg: NT35510_CMD_RAMWR,
+                    data: &ramp[..i],
+                })
+                .map_err(|_| Error::DsiWrite)?;
+            dsi_host
+                .read(
+                    DsiReadCommand::DcsShort {
+                        arg: NT35510_CMD_RAMRD,
+                    },
+                    &mut buf[..i],
+                )
+                .map_err(|_| Error::DsiRead)?;
+        }
+        Ok(())
+    }
+
     /// Initialize the panel with an explicit configuration.
     ///
     /// This is the primary init method. Configures orientation, color format,
