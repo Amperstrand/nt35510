@@ -90,7 +90,6 @@ pub enum ColorFormat {
 /// for BSP compatibility, minus `frame_rate` (NT35510 frame rate is set via LTDC timing,
 /// not the panel, unlike OTM8009A).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-#[non_exhaustive]
 pub struct Nt35510Config {
     /// Display orientation.
     pub mode: Mode,
