@@ -33,6 +33,11 @@ pub use regs::*;
 use embedded_display_controller::dsi::{DsiHostCtrlIo, DsiReadCommand, DsiWriteCommand};
 use embedded_hal::delay::DelayNs;
 
+/// Panel physical width in pixels (portrait orientation).
+pub const PANEL_WIDTH: u16 = 480;
+/// Panel physical height in pixels (portrait orientation).
+pub const PANEL_HEIGHT: u16 = 800;
+
 /// Errors that can occur during display initialization and operations.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Error {
@@ -82,6 +87,67 @@ pub enum ColorFormat {
     Rgb888,
 }
 
+/// Panel timing parameters for LTDC configuration.
+///
+/// These values define the blanking intervals and sync pulse widths
+/// used by the LTDC peripheral to generate the pixel clock and
+/// timing signals for the NT35510 panel.
+///
+/// The "standard" timing values come from the ST BSP reference code
+/// for the Frida 3K138 panel on STM32F469I-DISCO.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct PanelTiming {
+    /// Horizontal sync pulse width (in pixel clocks).
+    pub h_sync: u16,
+    /// Horizontal back porch (in pixel clocks).
+    pub h_back_porch: u16,
+    /// Horizontal front porch (in pixel clocks).
+    pub h_front_porch: u16,
+    /// Vertical sync pulse width (in lines).
+    pub v_sync: u16,
+    /// Vertical back porch (in lines).
+    pub v_back_porch: u16,
+    /// Vertical front porch (in lines).
+    pub v_front_porch: u16,
+    /// Target frame rate in Hz.
+    pub frame_rate: u16,
+}
+
+impl PanelTiming {
+    /// Standard timing for portrait orientation (ST BSP reference).
+    ///
+    /// Produces ~27MHz pixel clock on STM32F469I-DISCO.
+    /// Used by the sync BSP (`stm32f469i-disc`).
+    pub const STANDARD_PORTRAIT: Self = Self {
+        h_sync: 2,
+        h_back_porch: 34,
+        h_front_porch: 34,
+        v_sync: 1,
+        v_back_porch: 15,
+        v_front_porch: 16,
+        frame_rate: 60,
+    };
+
+    /// Standard timing for landscape orientation (ST BSP reference).
+    pub const STANDARD_LANDSCAPE: Self = Self {
+        h_sync: 1,
+        h_back_porch: 15,
+        h_front_porch: 16,
+        v_sync: 2,
+        v_back_porch: 34,
+        v_front_porch: 34,
+        frame_rate: 60,
+    };
+
+    /// Get the standard timing for the given orientation.
+    pub const fn for_mode(mode: Mode) -> Self {
+        match mode {
+            Mode::Portrait => Self::STANDARD_PORTRAIT,
+            Mode::Landscape => Self::STANDARD_LANDSCAPE,
+        }
+    }
+}
+
 /// Configuration for the NT35510 panel.
 ///
 /// Default values match the STM32F469I-DISCO board configuration
@@ -110,8 +176,8 @@ impl Default for Nt35510Config {
             mode: Mode::Portrait,
             color_map: ColorMap::Rgb,
             color_format: ColorFormat::Rgb888,
-            cols: 480,
-            rows: 800,
+            cols: PANEL_WIDTH,
+            rows: PANEL_HEIGHT,
         }
     }
 }
