@@ -28,11 +28,12 @@
 
 mod regs;
 
-use regs::*;
+pub use regs::*;
 
 use embedded_display_controller::dsi::{DsiHostCtrlIo, DsiReadCommand, DsiWriteCommand};
 use embedded_hal::delay::DelayNs;
 
+/// Errors that can occur during display initialization and operations.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Error {
     DsiRead,
@@ -115,6 +116,10 @@ impl Default for Nt35510Config {
     }
 }
 
+/// Driver for the NT35510 DSI LCD controller panel.
+///
+/// Create a new instance via [`Nt35510::new()`] or [`Nt35510::default()`],
+/// then initialize via [`init()`](Nt35510::init) or [`init_with_config()`](Nt35510::init_with_config).
 pub struct Nt35510 {
     initialized: bool,
 }

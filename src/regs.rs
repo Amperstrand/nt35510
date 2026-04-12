@@ -1,4 +1,3 @@
-#![allow(dead_code)]
 //! NT35510 register and command definitions.
 //!
 //! Reference: STMicroelectronics NT35510 driver (BSP_DISCO_F469NI),
