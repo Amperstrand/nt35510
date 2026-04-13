@@ -122,9 +122,9 @@ impl PanelTiming {
         h_sync: 2,
         h_back_porch: 34,
         h_front_porch: 34,
-        v_sync: 1,
-        v_back_porch: 15,
-        v_front_porch: 16,
+        v_sync: 120,
+        v_back_porch: 150,
+        v_front_porch: 150,
         frame_rate: 60,
     };
 
