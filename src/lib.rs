@@ -139,6 +139,32 @@ impl PanelTiming {
         frame_rate: 60,
     };
 
+    /// Timing for portrait orientation with correct NT35510 DSI vertical blanking.
+    ///
+    /// V_SYNC=120, V_BP=150, V_FP=150 are the authoritative values from:
+    /// - STMicroelectronics NT35510 component header (NT35510_480X800_VSYNC/VBP/VFP)
+    /// - ST BSP stm32469i_discovery_lcd.c (reference C implementation, pixel clock 27429 kHz)
+    /// - embassy-stm32f469i-disco display.rs (known-working async BSP)
+    /// - diybitcoinhardware/f469-disco (Specter DIY reference)
+    ///
+    /// `STANDARD_PORTRAIT` uses V_SYNC=1, V_BP=15, V_FP=16 which are insufficient for
+    /// DSI video mode — LTDC starts emitting active pixels before the panel's vertical
+    /// active window opens, causing the top rows to be cropped.
+    ///
+    /// Frame rate at 27,429 kHz pixel clock:
+    ///   total_v = 800 + 120 + 150 + 150 = 1220 lines
+    ///   total_h = 480 + 2 + 34 + 34 = 550 pixels
+    ///   fps = 27_429_000 / (1220 * 550) ≈ 40.9 Hz
+    pub const PORTRAIT_DSI: Self = Self {
+        h_sync: 2,
+        h_back_porch: 34,
+        h_front_porch: 34,
+        v_sync: 120,
+        v_back_porch: 150,
+        v_front_porch: 150,
+        frame_rate: 41,
+    };
+
     /// Get the standard timing for the given orientation.
     pub const fn for_mode(mode: Mode) -> Self {
         match mode {
