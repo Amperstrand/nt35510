@@ -8,10 +8,11 @@ use nt35510::{
     NT35510_CMD_B2, NT35510_CMD_B3, NT35510_CMD_B5, NT35510_CMD_B6, NT35510_CMD_B7, NT35510_CMD_B8,
     NT35510_CMD_B9, NT35510_CMD_BA, NT35510_CMD_BC, NT35510_CMD_BD, NT35510_CMD_BE, NT35510_CMD_BF,
     NT35510_CMD_CASET, NT35510_CMD_CC, NT35510_CMD_COLMOD, NT35510_CMD_DISPOFF, NT35510_CMD_DISPON,
-    NT35510_CMD_MADCTL, NT35510_CMD_RAMWR, NT35510_CMD_RASET, NT35510_CMD_RDID1, NT35510_CMD_RDID2,
-    NT35510_CMD_SETEXTC, NT35510_CMD_SLPIN, NT35510_CMD_SLPOUT, NT35510_CMD_TEEON,
+    NT35510_CMD_GSL, NT35510_CMD_INVOFF, NT35510_CMD_INVON, NT35510_CMD_MADCTL, NT35510_CMD_RAMWR,
+    NT35510_CMD_RASET, NT35510_CMD_RDDISBV, NT35510_CMD_RDID1, NT35510_CMD_RDID2, NT35510_CMD_SETEXTC,
+    NT35510_CMD_SLPIN, NT35510_CMD_SLPOUT, NT35510_CMD_SWRESET, NT35510_CMD_TEEON,
     NT35510_CMD_WRCABC, NT35510_CMD_WRCABCMB, NT35510_CMD_WRCTRLD, NT35510_CMD_WRDISBV,
-    NT35510_COLMOD_RGB565, NT35510_COLMOD_RGB888,
+    NT35510_COLMOD_RGB565, NT35510_COLMOD_RGB888, PanelTiming,
 };
 
 #[derive(Debug, Default)]
@@ -432,6 +433,13 @@ fn convenience_methods_match_expected_configs() {
 
 #[test]
 fn default_impls_match_documented_values() {
+    assert_eq!(Mode::default(), Mode::Portrait);
+    assert_eq!(ColorMap::default(), ColorMap::Rgb);
+    assert_eq!(ColorFormat::default(), ColorFormat::Rgb888);
+    assert_eq!(PanelTiming::default(), PanelTiming::STANDARD_PORTRAIT);
+    assert_eq!(PanelTiming::for_mode_dsi(Mode::Portrait), PanelTiming::PORTRAIT_DSI);
+    assert_eq!(PanelTiming::for_mode_dsi(Mode::Landscape), PanelTiming::STANDARD_LANDSCAPE);
+
     assert_eq!(
         Nt35510Config::default(),
         Nt35510Config {
@@ -445,6 +453,7 @@ fn default_impls_match_documented_values() {
 
     let lhs = Nt35510::default();
     let rhs = Nt35510::new();
+    assert_eq!(lhs, rhs);
     let mut lhs_host = MockDsiHost::default();
     let mut rhs_host = MockDsiHost::default();
     let mut lhs_delay = RecordingDelay::default();
@@ -461,4 +470,39 @@ fn new_has_no_side_effects_before_init() {
     let _panel = Nt35510::new();
     let host = MockDsiHost::default();
     assert!(host.writes.is_empty());
+}
+
+#[test]
+fn public_power_and_display_helpers_send_expected_commands() {
+    let mut panel = Nt35510::new();
+    let mut host = MockDsiHost::default()
+        .with_read_response(NT35510_CMD_RDDISBV, &[0x5A])
+        .with_read_response(NT35510_CMD_RDID2, &[0x80])
+        .with_read_response(NT35510_CMD_GSL, &[0x01, 0x23]);
+    let mut delay = RecordingDelay::default();
+
+    assert!(!panel.is_initialized());
+    assert_eq!(panel.soft_reset(&mut host, &mut delay), Ok(()));
+    assert_eq!(panel.sleep_out(&mut host, &mut delay), Ok(()));
+    assert!(panel.is_initialized());
+    assert_eq!(panel.set_display_off(&mut host), Ok(()));
+    assert_eq!(panel.set_display_on(&mut host), Ok(()));
+    assert_eq!(panel.set_inversion(&mut host, true), Ok(()));
+    assert_eq!(panel.set_inversion(&mut host, false), Ok(()));
+    assert_eq!(panel.read_brightness(&mut host), Ok(0x5A));
+    assert_eq!(panel.read_id(&mut host, NT35510_CMD_RDID2), Ok(0x80));
+    assert_eq!(panel.get_scan_line(&mut host), Ok(0x0123));
+
+    assert_eq!(
+        host.writes,
+        vec![
+            (NT35510_CMD_SWRESET, vec![0x00]),
+            (NT35510_CMD_SLPOUT, vec![0x00]),
+            (NT35510_CMD_DISPOFF, vec![0x00]),
+            (NT35510_CMD_DISPON, vec![0x00]),
+            (NT35510_CMD_INVON, vec![0x00]),
+            (NT35510_CMD_INVOFF, vec![0x00]),
+        ]
+    );
+    assert_eq!(delay.calls_us, vec![5_000, 120_000]);
 }

@@ -39,11 +39,16 @@ pub const PANEL_WIDTH: u16 = 480;
 pub const PANEL_HEIGHT: u16 = 800;
 
 /// Errors that can occur during display initialization and operations.
+#[cfg_attr(feature = "defmt", derive(defmt::Format))]
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Error {
+    /// A DSI read transaction failed.
     DsiRead,
+    /// A DSI write transaction failed.
     DsiWrite,
+    /// The panel responded, but with an unexpected ID value.
     ProbeMismatch(u8),
+    /// The configured display dimensions were zero.
     InvalidDimensions,
 }
 
@@ -61,6 +66,7 @@ impl core::fmt::Display for Error {
 }
 
 /// Display orientation. Matches [`otm8009a::Mode`](https://docs.rs/otm8009a/latest/otm8009a/enum.Mode.html).
+#[cfg_attr(feature = "defmt", derive(defmt::Format))]
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Mode {
     /// Portrait orientation (480x800). Tested on STM32F469I-DISCO.
@@ -69,7 +75,14 @@ pub enum Mode {
     Landscape,
 }
 
+impl Default for Mode {
+    fn default() -> Self {
+        Self::Portrait
+    }
+}
+
 /// Color channel ordering. Matches [`otm8009a::ColorMap`](https://docs.rs/otm8009a/latest/otm8009a/enum.ColorMap.html).
+#[cfg_attr(feature = "defmt", derive(defmt::Format))]
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum ColorMap {
     /// RGB order (default).
@@ -78,13 +91,26 @@ pub enum ColorMap {
     Bgr,
 }
 
+impl Default for ColorMap {
+    fn default() -> Self {
+        Self::Rgb
+    }
+}
+
 /// Pixel format for the DSI video stream.
+#[cfg_attr(feature = "defmt", derive(defmt::Format))]
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum ColorFormat {
     /// 16-bit RGB565. Tested on STM32F469I-DISCO.
     Rgb565,
     /// 24-bit RGB888. Tested on STM32F469I-DISCO.
     Rgb888,
+}
+
+impl Default for ColorFormat {
+    fn default() -> Self {
+        Self::Rgb888
+    }
 }
 
 /// Panel timing parameters for LTDC configuration.
@@ -95,6 +121,7 @@ pub enum ColorFormat {
 ///
 /// The "standard" timing values come from the ST BSP reference code
 /// for the Frida 3K138 panel on STM32F469I-DISCO.
+#[cfg_attr(feature = "defmt", derive(defmt::Format))]
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct PanelTiming {
     /// Horizontal sync pulse width (in pixel clocks).
@@ -172,6 +199,20 @@ impl PanelTiming {
             Mode::Landscape => Self::STANDARD_LANDSCAPE,
         }
     }
+
+    /// Get the recommended timing for DSI video mode for the given orientation.
+    pub const fn for_mode_dsi(mode: Mode) -> Self {
+        match mode {
+            Mode::Portrait => Self::PORTRAIT_DSI,
+            Mode::Landscape => Self::STANDARD_LANDSCAPE,
+        }
+    }
+}
+
+impl Default for PanelTiming {
+    fn default() -> Self {
+        Self::STANDARD_PORTRAIT
+    }
 }
 
 /// Configuration for the NT35510 panel.
@@ -182,6 +223,7 @@ impl PanelTiming {
 /// Mirrors [`otm8009a::Otm8009AConfig`](https://docs.rs/otm8009a/latest/otm8009a/struct.Otm8009AConfig.html)
 /// for BSP compatibility, minus `frame_rate` (NT35510 frame rate is set via LTDC timing,
 /// not the panel, unlike OTM8009A).
+#[cfg_attr(feature = "defmt", derive(defmt::Format))]
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct Nt35510Config {
     /// Display orientation.
@@ -212,6 +254,8 @@ impl Default for Nt35510Config {
 ///
 /// Create a new instance via [`Nt35510::new()`] or [`Nt35510::default()`],
 /// then initialize via [`init()`](Nt35510::init) or [`init_with_config()`](Nt35510::init_with_config).
+#[cfg_attr(feature = "defmt", derive(defmt::Format))]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct Nt35510 {
     initialized: bool,
 }
@@ -223,9 +267,16 @@ impl Default for Nt35510 {
 }
 
 impl Nt35510 {
+    /// Create a new uninitialized NT35510 driver instance.
     #[must_use]
     pub const fn new() -> Self {
         Self { initialized: false }
+    }
+
+    /// Return whether the panel has completed initialization.
+    #[must_use]
+    pub const fn is_initialized(&self) -> bool {
+        self.initialized
     }
 
     /// Probe whether an NT35510 is connected by reading its ID registers.
@@ -497,7 +548,61 @@ impl Nt35510 {
         Ok(())
     }
 
-    fn read_id(&self, dsi_host: &mut impl DsiHostCtrlIo, cmd: u8) -> Result<u8, Error> {
+    /// Exit sleep mode without re-running the full initialization sequence.
+    pub fn sleep_out<D: DelayNs>(
+        &mut self,
+        dsi: &mut impl DsiHostCtrlIo,
+        delay: &mut D,
+    ) -> Result<(), Error> {
+        self.write_cmd(dsi, NT35510_CMD_SLPOUT, 0x00)?;
+        delay.delay_us(120_000);
+        self.initialized = true;
+        Ok(())
+    }
+
+    /// Perform a software reset.
+    pub fn soft_reset<D: DelayNs>(
+        &mut self,
+        dsi: &mut impl DsiHostCtrlIo,
+        delay: &mut D,
+    ) -> Result<(), Error> {
+        self.write_cmd(dsi, NT35510_CMD_SWRESET, 0x00)?;
+        delay.delay_us(5_000);
+        self.initialized = false;
+        Ok(())
+    }
+
+    /// Enable or disable display inversion.
+    pub fn set_inversion<D: DsiHostCtrlIo>(
+        &mut self,
+        dsi: &mut D,
+        inverted: bool,
+    ) -> Result<(), Error> {
+        let cmd = if inverted {
+            NT35510_CMD_INVON
+        } else {
+            NT35510_CMD_INVOFF
+        };
+        self.write_cmd(dsi, cmd, 0x00)
+    }
+
+    /// Turn the display on without changing sleep state.
+    pub fn set_display_on<D: DsiHostCtrlIo>(&mut self, dsi: &mut D) -> Result<(), Error> {
+        self.write_cmd(dsi, NT35510_CMD_DISPON, 0x00)
+    }
+
+    /// Turn the display off without entering sleep mode.
+    pub fn set_display_off<D: DsiHostCtrlIo>(&mut self, dsi: &mut D) -> Result<(), Error> {
+        self.write_cmd(dsi, NT35510_CMD_DISPOFF, 0x00)
+    }
+
+    /// Read the current display brightness.
+    pub fn read_brightness<D: DsiHostCtrlIo>(&mut self, dsi: &mut D) -> Result<u8, Error> {
+        self.read_id(dsi, NT35510_CMD_RDDISBV)
+    }
+
+    /// Read a raw NT35510 identification register.
+    pub fn read_id(&self, dsi_host: &mut impl DsiHostCtrlIo, cmd: u8) -> Result<u8, Error> {
         let mut id = [0u8; 1];
         dsi_host
             .read(DsiReadCommand::DcsShort { arg: cmd }, &mut id)
@@ -505,6 +610,20 @@ impl Nt35510 {
         Ok(id[0])
     }
 
+    /// Read the current panel scan line.
+    pub fn get_scan_line<D: DsiHostCtrlIo>(&mut self, dsi: &mut D) -> Result<u16, Error> {
+        let mut scan_line = [0u8; 2];
+        dsi.read(
+            DsiReadCommand::DcsShort {
+                arg: NT35510_CMD_GSL,
+            },
+            &mut scan_line,
+        )
+        .map_err(|_| Error::DsiRead)?;
+        Ok(u16::from_be_bytes(scan_line))
+    }
+
+    /// Send a single-byte DCS write command.
     fn write_cmd(
         &self,
         dsi_host: &mut impl DsiHostCtrlIo,
@@ -519,6 +638,7 @@ impl Nt35510 {
             .map_err(|_| Error::DsiWrite)
     }
 
+    /// Send a DCS long write.
     fn write_long(
         &self,
         dsi_host: &mut impl DsiHostCtrlIo,
@@ -530,6 +650,7 @@ impl Nt35510 {
             .map_err(|_| Error::DsiWrite)
     }
 
+    /// Send a register write using short or long DCS form as needed.
     fn write_reg(
         &self,
         dsi_host: &mut impl DsiHostCtrlIo,

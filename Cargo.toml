@@ -1,6 +1,6 @@
 [package]
 name = "nt35510"
-version = "0.2.0"
+version = "0.2.1"
 edition = "2021"
 license = "0BSD"
 description = "Trait-based NT35510 DSI LCD controller driver"
@@ -13,7 +13,12 @@ readme = "README.md"
 bench = false
 doctest = false
 
+[features]
+default = []
+defmt = ["dep:defmt"]
+
 [dependencies]
+defmt = { version = "1", optional = true }
 embedded-hal = "1.0"
 embedded-display-controller = "0.2"
 

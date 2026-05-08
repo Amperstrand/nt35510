@@ -68,21 +68,37 @@ pub const NT35510_CMD_RDID3: u8 = 0xDC;
 pub const NT35510_CMD_SETEXTC: u8 = 0xF0;
 
 // Proprietary register blocks (accessed via SETEXTC page switching)
+/// Vendor-specific power rail tuning register block.
 pub const NT35510_CMD_B0: u8 = 0xB0;
+/// Vendor-specific gate/source voltage register block.
 pub const NT35510_CMD_B1: u8 = 0xB1;
+/// Vendor-specific analog bias register block.
 pub const NT35510_CMD_B2: u8 = 0xB2;
+/// Vendor-specific panel power timing register block.
 pub const NT35510_CMD_B3: u8 = 0xB3;
+/// Vendor-specific VCOM and drive strength register block.
 pub const NT35510_CMD_B5: u8 = 0xB5;
+/// Vendor-specific positive gamma/power rail register block.
 pub const NT35510_CMD_B6: u8 = 0xB6;
+/// Vendor-specific negative gamma/power rail register block.
 pub const NT35510_CMD_B7: u8 = 0xB7;
+/// Vendor-specific source driver timing register block.
 pub const NT35510_CMD_B8: u8 = 0xB8;
+/// Vendor-specific gate driver timing register block.
 pub const NT35510_CMD_B9: u8 = 0xB9;
+/// Vendor-specific display control register block.
 pub const NT35510_CMD_BA: u8 = 0xBA;
+/// Vendor-specific undocumented register block.
 pub const NT35510_CMD_BB: u8 = 0xBB;
+/// Vendor-specific VGH supply timing register block.
 pub const NT35510_CMD_BC: u8 = 0xBC;
+/// Vendor-specific VGL supply timing register block.
 pub const NT35510_CMD_BD: u8 = 0xBD;
+/// Vendor-specific booster control register block.
 pub const NT35510_CMD_BE: u8 = 0xBE;
+/// Vendor-specific page/feature enable register block.
 pub const NT35510_CMD_BF: u8 = 0xBF;
+/// Vendor-specific panel drive settings register block.
 pub const NT35510_CMD_CC: u8 = 0xCC;
 
 // ID register expected values
