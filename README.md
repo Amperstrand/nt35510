@@ -15,7 +15,7 @@ Tested on STM32F469I-Discovery (B08 revision, Frida 3K138 panel).
 
 ```toml
 [dependencies]
-nt35510 = "0.2"
+nt35510 = "0.2.1"
 ```
 
 This crate depends on [`embedded-display-controller`](https://crates.io/crates/embedded-display-controller) v0.2 for the `DsiHostCtrlIo` trait. Add it to your dependencies as well:
@@ -54,7 +54,7 @@ use nt35510::{ColorFormat, Mode, Nt35510, Nt35510Config};
 
 fn init_display(dsi: &mut impl DsiHostCtrlIo, delay: &mut impl DelayNs) {
     let mut panel = Nt35510::new();
-    let _ = panel.probe(dsi, delay);
+    let _ = panel.probe(dsi);
 
     let config = Nt35510Config {
         mode: Mode::Portrait,
@@ -68,7 +68,7 @@ fn init_display(dsi: &mut impl DsiHostCtrlIo, delay: &mut impl DelayNs) {
 ### Convenience wrappers
 
 ```rust
-panel.init(dsi, delay)?;                        // default: portrait, RGB565
+panel.init(dsi, delay)?;                          // default: portrait, RGB888
 panel.init_rgb565(dsi, delay, mode, color_map)?; // RGB565 with custom orientation
 panel.init_rgb888(dsi, delay, mode, color_map)?; // RGB888 with custom orientation
 ```
@@ -77,10 +77,20 @@ panel.init_rgb888(dsi, delay, mode, color_map)?; // RGB888 with custom orientati
 
 ```rust
 panel.set_brightness(dsi, 0xFF)?;    // max brightness
+let _brightness = panel.read_brightness(dsi)?;
 panel.set_backlight(dsi, true)?;     // backlight on
 panel.enable_te_output(dsi, 0)?;     // TE on VBlank only
+panel.set_display_off(dsi)?;         // blank without sleeping
+panel.set_display_on(dsi)?;          // unblank
+panel.set_inversion(dsi, true)?;     // enable inversion
+panel.set_inversion(dsi, false)?;    // disable inversion
 panel.sleep_in(dsi, delay)?;         // enter sleep mode
+panel.sleep_out(dsi, delay)?;        // leave sleep mode
 ```
+
+## Optional features
+
+- `defmt`: derives `defmt::Format` for the public API types used in embedded logging.
 
 ## Timing Configuration
 
