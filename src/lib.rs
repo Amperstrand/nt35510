@@ -67,50 +67,35 @@ impl core::fmt::Display for Error {
 
 /// Display orientation. Matches [`otm8009a::Mode`](https://docs.rs/otm8009a/latest/otm8009a/enum.Mode.html).
 #[cfg_attr(feature = "defmt", derive(defmt::Format))]
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Default)]
 pub enum Mode {
     /// Portrait orientation (480x800). Tested on STM32F469I-DISCO.
+    #[default]
     Portrait,
     /// Landscape orientation (800x480). Untested.
     Landscape,
 }
 
-impl Default for Mode {
-    fn default() -> Self {
-        Self::Portrait
-    }
-}
-
 /// Color channel ordering. Matches [`otm8009a::ColorMap`](https://docs.rs/otm8009a/latest/otm8009a/enum.ColorMap.html).
 #[cfg_attr(feature = "defmt", derive(defmt::Format))]
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Default)]
 pub enum ColorMap {
     /// RGB order (default).
+    #[default]
     Rgb,
     /// BGR order (swaps red and blue channels via MADCTL bit 3).
     Bgr,
 }
 
-impl Default for ColorMap {
-    fn default() -> Self {
-        Self::Rgb
-    }
-}
-
 /// Pixel format for the DSI video stream.
 #[cfg_attr(feature = "defmt", derive(defmt::Format))]
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Default)]
 pub enum ColorFormat {
     /// 16-bit RGB565. Tested on STM32F469I-DISCO.
     Rgb565,
     /// 24-bit RGB888. Tested on STM32F469I-DISCO.
+    #[default]
     Rgb888,
-}
-
-impl Default for ColorFormat {
-    fn default() -> Self {
-        Self::Rgb888
-    }
 }
 
 /// Panel timing parameters for LTDC configuration.
