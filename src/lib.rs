@@ -345,39 +345,42 @@ impl Nt35510 {
             return Err(Error::InvalidDimensions);
         }
 
-        // LV2 Page 1: power rail and voltage init
+        // NT35510 power-on sequence. Values from ST BSP nt35510.c (Frida 3K138 panel).
+        // Each register's function is documented inline from the ST C code comments.
+
+        // Page 1: power rail and voltage initialization.
         self.write_reg(
             dsi_host,
             NT35510_CMD_SETEXTC,
             &[0x55, 0xAA, 0x52, 0x08, 0x01],
-        )?;
-        self.write_reg(dsi_host, NT35510_CMD_B0, &[0x03, 0x03, 0x03])?;
-        self.write_reg(dsi_host, NT35510_CMD_B6, &[0x46, 0x46, 0x46])?;
-        self.write_reg(dsi_host, NT35510_CMD_B1, &[0x03, 0x03, 0x03])?;
-        self.write_reg(dsi_host, NT35510_CMD_B7, &[0x36, 0x36, 0x36])?;
-        self.write_reg(dsi_host, NT35510_CMD_B2, &[0x00, 0x00, 0x02])?;
-        self.write_reg(dsi_host, NT35510_CMD_B8, &[0x26, 0x26, 0x26])?;
-        self.write_reg(dsi_host, NT35510_CMD_BF, &[0x01])?;
+        )?; // LV2: Page 1 enable
+        self.write_reg(dsi_host, NT35510_CMD_B0, &[0x03, 0x03, 0x03])?; // AVDD: 5.2V
+        self.write_reg(dsi_host, NT35510_CMD_B6, &[0x46, 0x46, 0x46])?; // AVDD: Ratio
+        self.write_reg(dsi_host, NT35510_CMD_B1, &[0x03, 0x03, 0x03])?; // AVEE: -5.2V
+        self.write_reg(dsi_host, NT35510_CMD_B7, &[0x36, 0x36, 0x36])?; // AVEE: Ratio
+        self.write_reg(dsi_host, NT35510_CMD_B2, &[0x00, 0x00, 0x02])?; // VCL: -2.5V
+        self.write_reg(dsi_host, NT35510_CMD_B8, &[0x26, 0x26, 0x26])?; // VCL: Ratio
+        self.write_reg(dsi_host, NT35510_CMD_BF, &[0x01])?;             // VGH: 15V (free pump)
         self.write_reg(dsi_host, NT35510_CMD_B3, &[0x09, 0x09, 0x09])?;
-        self.write_reg(dsi_host, NT35510_CMD_B9, &[0x36, 0x36, 0x36])?;
-        self.write_reg(dsi_host, NT35510_CMD_B5, &[0x08, 0x08, 0x08])?;
-        self.write_reg(dsi_host, NT35510_CMD_BA, &[0x26, 0x26, 0x26])?;
-        self.write_reg(dsi_host, NT35510_CMD_BC, &[0x00, 0x80, 0x00])?;
-        self.write_reg(dsi_host, NT35510_CMD_BD, &[0x00, 0x80, 0x00])?;
-        self.write_reg(dsi_host, NT35510_CMD_BE, &[0x00, 0x50])?;
+        self.write_reg(dsi_host, NT35510_CMD_B9, &[0x36, 0x36, 0x36])?; // VGH: Ratio
+        self.write_reg(dsi_host, NT35510_CMD_B5, &[0x08, 0x08, 0x08])?; // VGL_REG: -10V
+        self.write_reg(dsi_host, NT35510_CMD_BA, &[0x26, 0x26, 0x26])?; // VGLX: Ratio
+        self.write_reg(dsi_host, NT35510_CMD_BC, &[0x00, 0x80, 0x00])?; // VGMP/VGSP: 4.5V/0V
+        self.write_reg(dsi_host, NT35510_CMD_BD, &[0x00, 0x80, 0x00])?; // VGMN/VGSN: -4.5V/0V
+        self.write_reg(dsi_host, NT35510_CMD_BE, &[0x00, 0x50])?;       // VCOM: -1.325V
 
-        // LV2 Page 0: display timing and control
+        // Page 0: display timing and control.
         self.write_reg(
             dsi_host,
             NT35510_CMD_SETEXTC,
             &[0x55, 0xAA, 0x52, 0x08, 0x00],
-        )?;
-        self.write_reg(dsi_host, NT35510_CMD_B1, &[0xFC, 0x00])?;
-        self.write_reg(dsi_host, NT35510_CMD_B6, &[0x03])?;
+        )?; // LV2: Page 0 enable
+        self.write_reg(dsi_host, NT35510_CMD_B1, &[0xFC, 0x00])?; // Display control
+        self.write_reg(dsi_host, NT35510_CMD_B6, &[0x03])?;       // Src hold time
         self.write_reg(dsi_host, NT35510_CMD_B5, &[0x51])?;
-        self.write_reg(dsi_host, NT35510_CMD_B7, &[0x00, 0x00])?;
-        self.write_reg(dsi_host, NT35510_CMD_B8, &[0x01, 0x02, 0x02, 0x02])?;
-        self.write_reg(dsi_host, NT35510_CMD_BC, &[0x00, 0x00, 0x00])?;
+        self.write_reg(dsi_host, NT35510_CMD_B7, &[0x00, 0x00])?; // Gate EQ control
+        self.write_reg(dsi_host, NT35510_CMD_B8, &[0x01, 0x02, 0x02, 0x02])?; // Src EQ control (Mode2)
+        self.write_reg(dsi_host, NT35510_CMD_BC, &[0x00, 0x00, 0x00])?; // Inv. mode (2-dot)
         self.write_reg(dsi_host, NT35510_CMD_CC, &[0x03, 0x00, 0x00])?;
         self.write_reg(dsi_host, NT35510_CMD_BA, &[0x01])?;
 
@@ -389,6 +392,8 @@ impl Nt35510 {
         )?;
         self.write_cmd(dsi_host, NT35510_CMD_COLMOD, NT35510_COLMOD_RGB888)?;
 
+        // NT35510 datasheet: wait 200ms after COLMOD before MADCTL.
+        // ST BSP comment: "Add a delay, otherwise MADCTL not taken."
         delay.delay_us(200_000);
 
         let mut madctl = match config.mode {
@@ -413,10 +418,11 @@ impl Nt35510 {
             &[0x00, 0x00, last_row[0], last_row[1]],
         )?;
 
+        // NT35510 datasheet: tSLPOUT ≥ 120ms after SLPOUT command.
         self.write_cmd(dsi_host, NT35510_CMD_SLPOUT, 0x00)?;
         delay.delay_us(120_000);
 
-        // Re-set pixel format after sleep out
+        // Re-set pixel format after sleep out (panel may reset COLMOD on wake)
         self.write_cmd(dsi_host, NT35510_CMD_COLMOD, NT35510_COLMOD_RGB888)?;
         if config.color_format == ColorFormat::Rgb565 {
             self.write_cmd(dsi_host, NT35510_CMD_COLMOD, NT35510_COLMOD_RGB565)?;
