@@ -4,9 +4,9 @@ version = "0.2.1"
 edition = "2021"
 license = "0BSD"
 description = "Trait-based NT35510 DSI LCD controller driver"
-repository = "https://github.com/Amperstrand/nt35510"
 categories = ["embedded", "hardware-support", "no-std"]
 keywords = ["dsi", "mipi", "lcd", "nt35510", "display"]
+repository = "https://github.com/Amperstrand/nt35510"
 readme = "README.md"
 
 [lib]
