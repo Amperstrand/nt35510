@@ -67,7 +67,7 @@ impl DsiHostCtrlIo for MockDsiHost {
         }
 
         let response = self.read_responses.get(&arg).cloned().unwrap_or_default();
-        for (dst, src) in buf.iter_mut().zip(response.into_iter()) {
+        for (dst, src) in buf.iter_mut().zip(response) {
             *dst = src;
         }
         Ok(())

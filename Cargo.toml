@@ -2,6 +2,7 @@
 name = "nt35510"
 version = "0.2.1"
 edition = "2021"
+rust-version = "1.94.0"
 license = "0BSD"
 description = "Trait-based NT35510 DSI LCD controller driver"
 categories = ["embedded", "hardware-support", "no-std"]

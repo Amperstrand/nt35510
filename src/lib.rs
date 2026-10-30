@@ -360,14 +360,14 @@ impl Nt35510 {
         self.write_reg(dsi_host, NT35510_CMD_B7, &[0x36, 0x36, 0x36])?; // AVEE: Ratio
         self.write_reg(dsi_host, NT35510_CMD_B2, &[0x00, 0x00, 0x02])?; // VCL: -2.5V
         self.write_reg(dsi_host, NT35510_CMD_B8, &[0x26, 0x26, 0x26])?; // VCL: Ratio
-        self.write_reg(dsi_host, NT35510_CMD_BF, &[0x01])?;             // VGH: 15V (free pump)
+        self.write_reg(dsi_host, NT35510_CMD_BF, &[0x01])?; // VGH: 15V (free pump)
         self.write_reg(dsi_host, NT35510_CMD_B3, &[0x09, 0x09, 0x09])?;
         self.write_reg(dsi_host, NT35510_CMD_B9, &[0x36, 0x36, 0x36])?; // VGH: Ratio
         self.write_reg(dsi_host, NT35510_CMD_B5, &[0x08, 0x08, 0x08])?; // VGL_REG: -10V
         self.write_reg(dsi_host, NT35510_CMD_BA, &[0x26, 0x26, 0x26])?; // VGLX: Ratio
         self.write_reg(dsi_host, NT35510_CMD_BC, &[0x00, 0x80, 0x00])?; // VGMP/VGSP: 4.5V/0V
         self.write_reg(dsi_host, NT35510_CMD_BD, &[0x00, 0x80, 0x00])?; // VGMN/VGSN: -4.5V/0V
-        self.write_reg(dsi_host, NT35510_CMD_BE, &[0x00, 0x50])?;       // VCOM: -1.325V
+        self.write_reg(dsi_host, NT35510_CMD_BE, &[0x00, 0x50])?; // VCOM: -1.325V
 
         // Page 0: display timing and control.
         self.write_reg(
@@ -376,7 +376,7 @@ impl Nt35510 {
             &[0x55, 0xAA, 0x52, 0x08, 0x00],
         )?; // LV2: Page 0 enable
         self.write_reg(dsi_host, NT35510_CMD_B1, &[0xFC, 0x00])?; // Display control
-        self.write_reg(dsi_host, NT35510_CMD_B6, &[0x03])?;       // Src hold time
+        self.write_reg(dsi_host, NT35510_CMD_B6, &[0x03])?; // Src hold time
         self.write_reg(dsi_host, NT35510_CMD_B5, &[0x51])?;
         self.write_reg(dsi_host, NT35510_CMD_B7, &[0x00, 0x00])?; // Gate EQ control
         self.write_reg(dsi_host, NT35510_CMD_B8, &[0x01, 0x02, 0x02, 0x02])?; // Src EQ control (Mode2)
